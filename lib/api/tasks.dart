@@ -16,14 +16,21 @@ class Task {
   final int id;
   final String title;
   final String? description;
+  final String status;
 
-  Task({required this.id, required this.title, this.description});
+  Task({
+    required this.id,
+    required this.title,
+    this.description,
+    required this.status,
+  });
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
       id: json['id'],
       title: json['title'],
       description: json['description'],
+      status: json['status'],
     );
   }
 }
@@ -37,16 +44,19 @@ void setupLocator(){
 class TaskApi {
   final String host = "localhost:60106";
 
-  Future<List<Task>> fetchTasks([int page = 0]) async {
+  Future<List<Task>> fetchTasks([int page = 0, String? status]) async {
     final prefs = await SharedPreferences.getInstance();
     var token = (prefs.getString('access_token'))!;
 
-    final url = Uri.http(host, "tasks",
-        {'skip': '${page * 10}'}); // Replace with your FastAPI URL
+    final uri = Uri.http(host, "tasks", {
+      'skip': '${page * 10}',
+      if (status != null) 'status': status,
+    });
+
     final response = await http.get(
-      url,
+      uri,
       headers: {
-        'Authorization': 'Bearer $token', // Replace with actual token
+        'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
     );
@@ -73,6 +83,7 @@ class TaskApi {
       body: json.encode({
         'title': title,
         'description': description,
+        'status': 'Assigned',   // TODO: added default in API
       }),
     );
 
@@ -92,8 +103,7 @@ class TaskApi {
     return response;
   }
 
-  Future<Response> updateTaskRequest(
-      int taskId, String title, String description) async {
+  Future<Response> updateTaskRequest(int taskId, String title, String description, String status) async {
     final prefs = await SharedPreferences.getInstance();
     var token = (prefs.getString('access_token'))!;
     final url = Uri.http(host, "tasks/$taskId");
@@ -107,6 +117,7 @@ class TaskApi {
       body: json.encode({
         'title': title,
         'description': description,
+        'status': status,
       }),
     );
 
@@ -139,8 +150,8 @@ class TaskApi {
     if (response.statusCode == 200) {
       List<dynamic> photosJson = json.decode(response.body);
       if (photosJson.isNotEmpty) {
-        List<String>ret = [];
-        for (var photo in photosJson){
+        List<String> ret = [];
+        for (var photo in photosJson) {
           ret.add(photo['url']);
         }
         return ret;
@@ -157,7 +168,7 @@ class TaskApi {
     // Create the multipart request
     final request = http.MultipartRequest('POST', url)
       ..headers['Authorization'] = 'Bearer $token'
-      ..headers['Content-Type'] =  'multipart/form-data';
+      ..headers['Content-Type'] = 'multipart/form-data';
 
     // Add the file to the request based on platform
     if (kIsWeb && webPhoto != null) {

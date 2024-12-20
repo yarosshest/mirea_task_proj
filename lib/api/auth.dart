@@ -1,7 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'package:http/http.dart';
 
-String host = "localhost:60106";
+String host = "0.0.0.0:60106";
 
 
 Future<Response> registerUser(String username, String password) async {

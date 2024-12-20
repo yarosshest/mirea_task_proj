@@ -64,6 +64,23 @@ class _TaskListPageState extends State<TaskListPage> {
     super.dispose();
   }
 
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'assigned':
+        return Colors.blueAccent;
+      case 'resolved':
+        return Colors.greenAccent;
+      case 'closed':
+        return Colors.grey;
+      case 'feedback':
+        return Colors.orangeAccent;
+      case 'rejected':
+        return Colors.redAccent;
+      default:
+        return Colors.blueAccent;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     _loadTasks();
@@ -88,7 +105,6 @@ class _TaskListPageState extends State<TaskListPage> {
           itemBuilder: (context, index) {
             if (index == _tasks.length) {
               return const Center(child: CircularProgressIndicator());
-
             }
 
             final task = _tasks[index];
@@ -102,7 +118,7 @@ class _TaskListPageState extends State<TaskListPage> {
                 ).then((_) => _refreshTasks());
               },
               child: Card(
-                color: Colors.blueAccent,
+                color: _getStatusColor(task.status),
                 child: ListTile(
                   title: Text(task.title),
                   subtitle: Text(task.description ?? 'No description'),

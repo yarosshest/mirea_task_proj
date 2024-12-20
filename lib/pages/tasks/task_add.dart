@@ -16,11 +16,23 @@ class _AddTaskPageState extends State<AddTaskPage> {
   final TaskApi taskApi = TaskApi();
 
   Future<void> addTask() async {
+    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty) {
+      setState(() {
+        _responseMessage = "Both fields are required.";
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _responseMessage = null;
+    });
 
     try {
-      final response = await taskApi.addTaskRequest(_titleController.text,
-          _descriptionController.text);
-
+      final response = await taskApi.addTaskRequest(
+        _titleController.text,
+        _descriptionController.text,
+      );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         setState(() {

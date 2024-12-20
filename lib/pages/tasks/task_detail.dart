@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,8 +9,7 @@ import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 
 class TaskDetailPage extends StatefulWidget {
   final int taskId;
-  const TaskDetailPage({Key? key, required this.taskId})
-      : super(key: key);
+  const TaskDetailPage({Key? key, required this.taskId}) : super(key: key);
 
   @override
   _TaskDetailPageState createState() => _TaskDetailPageState();
@@ -28,6 +26,10 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   bool _isUploadingPhoto = false;
   final TaskApi taskApi = TaskApi();
 
+  // Статус задачи
+  String _status = 'assigned'; // начальный статус задачи
+  final List<String> _statusOptions = ['assigned', 'resolved', 'closed', 'feedback', 'rejected'];
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +45,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         setState(() {
           _titleController.text = data['title'];
           _descriptionController.text = data['description'] ?? '';
+          _status = data['status'] ?? 'assigned';
           _isLoading = false;
         });
       } else {
@@ -62,7 +65,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
     try {
       final response = await taskApi.updateTaskRequest(
-          widget.taskId, _titleController.text, _descriptionController.text);
+          widget.taskId, _titleController.text, _descriptionController.text, _status);
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -119,9 +122,6 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                     print(error);
                     return Icon(Icons.error);
                   },
-                  // Optional: Set image height and width
-                  // height: 100,
-                  // width: 100,
                   fit: BoxFit.cover, // Adjust as needed
                 ),
               );
@@ -170,7 +170,6 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -186,41 +185,61 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ListView(
-                children: [
-                  TextField(
-                    controller: _titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Title',
-                      border: OutlineInputBorder(),
-                    ),
+            padding: const EdgeInsets.all(16.0),
+            child: ListView(
+              children: [
+                TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Description',
-                      border: OutlineInputBorder(),
-                    ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 16),
-                  buildTaskPhoto(widget.taskId),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _pickImage,
-                    child: const Text('Upload Photo'),
+                ),
+                const SizedBox(height: 16),
+                // Dropdown для выбора статуса
+                DropdownButtonFormField<String>(
+                  value: _status,
+                  onChanged: (newValue) {
+                    setState(() {
+                      _status = newValue!;
+                    });
+                  },
+                  items: _statusOptions.map((status) {
+                    return DropdownMenuItem<String>(
+                      value: status,
+                      child: Text(status[0].toUpperCase() + status.substring(1)),
+                    );
+                  }).toList(),
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 16),
-                  _isUpdating
-                      ? const CircularProgressIndicator()
-                      : ElevatedButton(
-                          onPressed: _updateTask,
-                          child: const Text('Update Task'),
-                        ),
-                ],
-              ),
-            ),
+                ),
+                const SizedBox(height: 16),
+                buildTaskPhoto(widget.taskId),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _pickImage,
+                  child: const Text('Upload Photo'),
+                ),
+                const SizedBox(height: 16),
+                _isUpdating
+                    ? const CircularProgressIndicator()
+                    : ElevatedButton(
+                  onPressed: _updateTask,
+                  child: const Text('Update Task'),
+                ),
+              ],
+        ),
+      ),
     );
   }
 }

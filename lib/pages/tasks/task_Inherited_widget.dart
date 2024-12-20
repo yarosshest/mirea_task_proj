@@ -7,8 +7,6 @@ class TaskInheritedWidget extends InheritedWidget{
   final List<Task> tasks;
   Future<List<Task>> Function([int]) fetchTasks;
 
-
-
   TaskInheritedWidget({super.key,
     required this.tasks,
     required this.fetchTasks,
