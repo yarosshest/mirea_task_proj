@@ -1,41 +1,46 @@
-import 'package:http/http.dart' as http;
-import 'package:http/http.dart';
+import 'dart:convert';
+import 'dart:io';
 
-String host = "0.0.0.0:60106";
+String host = "78.136.223.100:60106";
 
+Future<HttpClientResponse> registerUser(String username, String password) async {
+  final uri = Uri.http(host, "auth/register");
 
-Future<Response> registerUser(String username, String password) async {
-  final url = Uri.http(host, "auth/register"); // Update with your API URL
+  // Создаем экземпляр HttpClient
+  final httpClient = HttpClient();
+  final request = await httpClient.postUrl(uri);
 
-  final response = await http.post(
-    url,
-    headers: {
-      'accept':' application/json',
-      'Content-Type': 'application/x-www-form-urlencoded', // Necessary for form data
-    },
-    body: {
-      'login': username,
-      'password': password,
-    },
-  );
+  // Устанавливаем заголовки
+  request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+  request.headers.set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded');
+
+  // Устанавливаем тело запроса
+  final requestBody = 'login=$username&password=$password';
+  request.write(requestBody);
+
+  // Отправляем запрос
+  final response = await request.close();
 
   return response;
 }
 
-Future<Response> loginUser(String username, String password) async {
-  final url = Uri.http(host, "auth/login"); // Update with your API URL
+Future<HttpClientResponse> loginUser(String username, String password) async {
+  final uri = Uri.http(host, "auth/login");
 
-  final response = await http.post(
-    url,
-    headers: {
-      'accept':' application/json',
-      'Content-Type': 'application/x-www-form-urlencoded', // Necessary for form data
-    },
-    body: {
-      'login': username,
-      'password': password,
-    },
-  );
+  // Создаем экземпляр HttpClient
+  final httpClient = HttpClient();
+  final request = await httpClient.postUrl(uri);
+
+  // Устанавливаем заголовки
+  request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+  request.headers.set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded');
+
+  // Устанавливаем тело запроса
+  final requestBody = 'login=$username&password=$password';
+  request.write(requestBody);
+
+  // Отправляем запрос
+  final response = await request.close();
 
   return response;
 }

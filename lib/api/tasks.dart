@@ -1,16 +1,13 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:get_it/get_it.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/http.dart';
-import 'package:http_parser/http_parser.dart';
-import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:http/http.dart' as http;
-import 'package:image_picker_web/image_picker_web.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mirea_task_proj/api/requests/http.dart';
+import 'package:mirea_task_proj/api/requests/multipart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// Предполагаем, что CustomResponse, httpRequest и multipartRequest уже определены выше
 
 class Task {
   final int id;
@@ -35,25 +32,26 @@ class Task {
   }
 }
 
-final getIt =GetIt.instance;
+final getIt = GetIt.instance;
 
-void setupLocator(){
+void setupLocator() {
   getIt.registerSingleton<TaskApi>(TaskApi());
 }
 
 class TaskApi {
-  final String host = "localhost:60106";
+  final String host = "78.136.223.100:60106";
 
   Future<List<Task>> fetchTasks([int page = 0, String? status]) async {
     final prefs = await SharedPreferences.getInstance();
-    var token = (prefs.getString('access_token'))!;
+    var token = prefs.getString('access_token')!;
 
     final uri = Uri.http(host, "tasks", {
       'skip': '${page * 10}',
       if (status != null) 'status': status,
     });
 
-    final response = await http.get(
+    final response = await httpRequest(
+      'GET',
       uri,
       headers: {
         'Authorization': 'Bearer $token',
@@ -69,12 +67,13 @@ class TaskApi {
     }
   }
 
-  Future<Response> addTaskRequest(String title, String description) async {
+  Future<CustomResponse> addTaskRequest(String title, String description) async {
     final prefs = await SharedPreferences.getInstance();
-    var token = (prefs.getString('access_token'))!;
+    var token = prefs.getString('access_token')!;
     final url = Uri.http(host, "tasks");
 
-    final response = await http.post(
+    final response = await httpRequest(
+      'POST',
       url,
       headers: {
         'Authorization': 'Bearer $token',
@@ -83,32 +82,36 @@ class TaskApi {
       body: json.encode({
         'title': title,
         'description': description,
-        'status': 'Assigned',   // TODO: added default in API
+        'status': 'Assigned',
       }),
     );
 
     return response;
   }
 
-  Future<Response> fetchTaskDetailsRequest(int taskId) async {
+  Future<CustomResponse> fetchTaskDetailsRequest(int taskId) async {
     final prefs = await SharedPreferences.getInstance();
-    var token = (prefs.getString('access_token'))!;
+    var token = prefs.getString('access_token')!;
     final url = Uri.http(host, "tasks/$taskId");
 
-    final response = await http.get(url, headers: {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    });
-
+    final response = await httpRequest(
+      'GET',
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
     return response;
   }
 
-  Future<Response> updateTaskRequest(int taskId, String title, String description, String status) async {
+  Future<CustomResponse> updateTaskRequest(int taskId, String title, String description, String status) async {
     final prefs = await SharedPreferences.getInstance();
-    var token = (prefs.getString('access_token'))!;
+    var token = prefs.getString('access_token')!;
     final url = Uri.http(host, "tasks/$taskId");
 
-    final response = await http.put(
+    final response = await httpRequest(
+      'PUT',
       url,
       headers: {
         'Authorization': 'Bearer $token',
@@ -124,28 +127,36 @@ class TaskApi {
     return response;
   }
 
-  Future<Response> deleteTaskRequest(int taskId) async {
+  Future<CustomResponse> deleteTaskRequest(int taskId) async {
     final prefs = await SharedPreferences.getInstance();
-    var token = (prefs.getString('access_token'))!;
+    var token = prefs.getString('access_token')!;
     final url = Uri.http(host, "tasks/$taskId");
 
-    final response = await http.delete(url, headers: {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    });
+    final response = await httpRequest(
+      'DELETE',
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
     return response;
   }
 
   Future<List<String>?> getTaskPhotoRequest(int taskId) async {
     final prefs = await SharedPreferences.getInstance();
-    var token = (prefs.getString('access_token'))!;
+    var token = prefs.getString('access_token')!;
     final url = Uri.http(host, "tasks/$taskId/photos");
 
-    final response = await http.get(url, headers: {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    });
+    final response = await httpRequest(
+      'GET',
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
     if (response.statusCode == 200) {
       List<dynamic> photosJson = json.decode(response.body);
@@ -160,38 +171,36 @@ class TaskApi {
     return null;
   }
 
-  Future<http.Response> uploadTaskPhoto(int taskId, File? photo, Uint8List? webPhoto) async {
+  Future<CustomResponse> uploadTaskPhoto(int taskId, File? photo, Uint8List? webPhoto) async {
     final prefs = await SharedPreferences.getInstance();
     var token = prefs.getString('access_token')!;
     final url = Uri.http(host, "tasks/$taskId/photos");
 
-    // Create the multipart request
-    final request = http.MultipartRequest('POST', url)
-      ..headers['Authorization'] = 'Bearer $token'
-      ..headers['Content-Type'] = 'multipart/form-data';
+    List<int>? fileBytes;
+    String filename = 'upload.jpg';
 
-    // Add the file to the request based on platform
     if (kIsWeb && webPhoto != null) {
-      // Web: Add image as bytes
-      request.files.add(http.MultipartFile.fromBytes(
-        'file',
-        webPhoto,
-        filename: 'upload.jpg',
-        contentType: MediaType('image', 'jpeg'),
-      ));
+      // Веб: фото в байтах
+      fileBytes = webPhoto;
     } else if (photo != null) {
-      // Mobile: Add image from file path
-      request.files.add(await http.MultipartFile.fromPath(
-        'file',
-        photo.path,
-        contentType: MediaType('image', 'jpeg'),
-      ));
+      // Мобильные платформы: читаем файл
+      fileBytes = await photo.readAsBytes();
     } else {
       throw Exception("No file selected");
     }
 
-    // Send the request and wait for the response
-    final response = await request.send();
-    return await http.Response.fromStream(response);
+    final response = await multipartRequest(
+      'POST',
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+      },
+      fieldName: 'file',
+      fileName: filename,
+      fileBytes: fileBytes,
+      fileType: 'image/jpeg',
+    );
+
+    return response;
   }
 }

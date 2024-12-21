@@ -1,11 +1,12 @@
-import 'dart:io';
+import 'dart:typed_data';
+import 'dart:io' show File; // Оставляем, чтобы использовать File? для сохранения ссылки на мобильном
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image_picker_web/image_picker_web.dart';
-import 'dart:convert';
 import 'package:mirea_task_proj/api/tasks.dart';
-import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
+import 'package:mirea_task_proj/file_hendlesr/file_picker.dart';
+// import 'package:mirea_task_proj/pages/tasks/file_hendlesr/file_picker.dart'; // <-- единственный импорт (условный)
+import 'package:flutter/foundation.dart' show kIsWeb; // для проверки платформы
+import 'dart:convert';
 
 class TaskDetailPage extends StatefulWidget {
   final int taskId;
@@ -21,14 +22,23 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   bool _isLoading = true;
   bool _isUpdating = false;
   bool _isDeleting = false;
-  File? _selectedImage;
-  Uint8List? _webImageData;
-  bool _isUploadingPhoto = false;
+
+  // Ссылка на байты (веб) или File (мобайл)
+  File? _selectedImageFile;
+  Uint8List? _selectedImageBytes;
+
   final TaskApi taskApi = TaskApi();
 
   // Статус задачи
-  String _status = 'assigned'; // начальный статус задачи
+  String _status = 'assigned';
   final List<String> _statusOptions = ['assigned', 'resolved', 'closed', 'feedback', 'rejected'];
+
+  // Создаём экземпляр FilePicker (через условный экспорт будет либо FilePickerMobile, либо FilePickerWeb)
+  late final FilePicker _filePicker;
+  // Если хотите, можно делать проверку вида:
+  // final FilePicker _filePicker = kIsWeb ? FilePickerWeb() : FilePickerMobile();
+  // Но благодаря условным экспортам обычно достаточно просто написать FilePickerMobile(),
+  // ведь на вебе класс FilePickerMobile заменится на FilePickerWeb автоматически.
 
   @override
   void initState() {
@@ -52,9 +62,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
         throw Exception('Failed to load task');
       }
     } catch (error) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Error: $error')));
     }
@@ -62,7 +70,6 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   Future<void> _updateTask() async {
     setState(() => _isUpdating = true);
-
     try {
       final response = await taskApi.updateTaskRequest(
           widget.taskId, _titleController.text, _descriptionController.text, _status);
@@ -88,8 +95,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       final response = await taskApi.deleteTaskRequest(widget.taskId);
 
       if (response.statusCode == 200) {
-        Navigator.pop(
-            context, true); // Return to previous page with success signal
+        Navigator.pop(context, true); // вернуться с успехом
       } else {
         throw Exception('Failed to delete task');
       }
@@ -106,23 +112,22 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       future: taskApi.getTaskPhotoRequest(taskId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         } else if (snapshot.hasError || snapshot.data == null || snapshot.data!.isEmpty) {
-          return Center(child: Text("No photos available"));
+          return const Center(child: Text("No photos available"));
         } else {
-          // Display a list of images
           return Column(
             children: snapshot.data!.map((imageUrl) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: CachedNetworkImage(
                   imageUrl: imageUrl,
-                  placeholder: (context, url) => CircularProgressIndicator(),
+                  placeholder: (context, url) => const CircularProgressIndicator(),
                   errorWidget: (context, url, error) {
                     print(error);
-                    return Icon(Icons.error);
+                    return const Icon(Icons.error);
                   },
-                  fit: BoxFit.cover, // Adjust as needed
+                  fit: BoxFit.cover,
                 ),
               );
             }).toList(),
@@ -133,42 +138,64 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   }
 
   Future<void> _pickImage() async {
-    if (kIsWeb) {
-      _webImageData = await ImagePickerWeb.getImageAsBytes();
-      setState(() {}); // Update UI with selected image
-    } else {
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        _selectedImage = File(pickedFile.path);
-        setState(() {}); // Update UI with selected image
-      }
+    // С помощью условного экспорта:
+    // - на вебе _filePicker будет от класса FilePickerWeb
+    // - на мобильных _filePicker будет от класса FilePickerMobile
+    final bytes = await _filePicker.pickImage();
+
+    if (bytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No photo selected')),
+      );
+      return;
     }
+
+    if (kIsWeb) {
+      // Для веба у нас есть только байты
+      _selectedImageBytes = bytes;
+      _selectedImageFile = null;
+    } else {
+      // Для мобильной платформы можно временно сохранить файл,
+      // но поскольку мы вернули bytes, у нас нет пути к файлу
+      // (если нужно, можно изменить реализацию FilePickerMobile).
+      // Или же в FilePickerMobile вы можете возвращать File вместо Uint8List,
+      // в зависимости от того, как вам удобно.
+      _selectedImageBytes = bytes;
+      _selectedImageFile = null;
+    }
+
+    setState(() {});
     await _uploadPhoto();
   }
 
   Future<void> _uploadPhoto() async {
-    if (_selectedImage == null && _webImageData == null) {
+    if (_selectedImageFile == null && _selectedImageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No photo selected')));
+        const SnackBar(content: Text('No photo selected')),
+      );
       return;
     }
+    setState(() => _isUploadingPhoto = true);
 
     final response = await taskApi.uploadTaskPhoto(
       widget.taskId,
-      _selectedImage,
-      _webImageData,
+      _selectedImageFile,
+      _selectedImageBytes,
     );
 
+    setState(() => _isUploadingPhoto = false);
+
     if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Photo uploaded successfully')));
-      _fetchTaskDetails(); // Refresh task details after upload
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Photo uploaded successfully')));
+      _fetchTaskDetails(); // Обновим список фотографий
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload photo')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Failed to upload photo')));
     }
   }
+
+  bool _isUploadingPhoto = false; // для индикации загрузки
 
   @override
   Widget build(BuildContext context) {
@@ -185,59 +212,60 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ListView(
-              children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Title',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Dropdown для выбора статуса
-                DropdownButtonFormField<String>(
-                  value: _status,
-                  onChanged: (newValue) {
-                    setState(() {
-                      _status = newValue!;
-                    });
-                  },
-                  items: _statusOptions.map((status) {
-                    return DropdownMenuItem<String>(
-                      value: status,
-                      child: Text(status[0].toUpperCase() + status.substring(1)),
-                    );
-                  }).toList(),
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                buildTaskPhoto(widget.taskId),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _pickImage,
-                  child: const Text('Upload Photo'),
-                ),
-                const SizedBox(height: 16),
-                _isUpdating
-                    ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                  onPressed: _updateTask,
-                  child: const Text('Update Task'),
-                ),
-              ],
+        padding: const EdgeInsets.all(16.0),
+        child: ListView(
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Dropdown для выбора статуса
+            DropdownButtonFormField<String>(
+              value: _status,
+              onChanged: (newValue) {
+                setState(() {
+                  _status = newValue!;
+                });
+              },
+              items: _statusOptions.map((status) {
+                return DropdownMenuItem<String>(
+                  value: status,
+                  child: Text(status[0].toUpperCase() + status.substring(1)),
+                );
+              }).toList(),
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            buildTaskPhoto(widget.taskId),
+            const SizedBox(height: 16),
+            if (_isUploadingPhoto) const Center(child: CircularProgressIndicator()),
+            ElevatedButton(
+              onPressed: _pickImage,
+              child: const Text('Upload Photo'),
+            ),
+            const SizedBox(height: 16),
+            _isUpdating
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+              onPressed: _updateTask,
+              child: const Text('Update Task'),
+            ),
+          ],
         ),
       ),
     );

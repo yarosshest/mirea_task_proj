@@ -30,9 +30,9 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     if (response.statusCode == 200) {
-      final accessToken = response.headers['access_token'];
+      final accessToken = response.headers['access_token']?[0];
       if (accessToken != null) {
-        await _saveToken(accessToken); // Save the token in shared preferences
+        await _saveToken(accessToken as String); // Save the token in shared preferences
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const HomePage(title: "Такс трекер")),
